@@ -10,6 +10,15 @@ class ApiService {
         'Content-Type': 'application/json'
       }
     });
+
+    // Add response interceptor for better error handling
+    this.client.interceptors.response.use(
+      response => response,
+      error => {
+        console.error('API Error:', error.response?.data || error.message);
+        return Promise.reject(error);
+      }
+    );
   }
 
   // Sessions
@@ -36,6 +45,7 @@ class ApiService {
 
   // Doubts
   async submitDoubt(doubtData) {
+    console.log('📤 Submitting doubt:', doubtData);
     const response = await this.client.post('/doubts', doubtData);
     return response.data;
   }
@@ -46,7 +56,8 @@ class ApiService {
     return response.data;
   }
 
-  async markAnswered(doubtId, answer) {
+  async markAnswered(doubtId, answer = '') {
+    console.log('✅ Marking doubt as answered:', doubtId);
     const response = await this.client.patch(`/doubts/${doubtId}/answer`, { answer });
     return response.data;
   }
@@ -58,6 +69,7 @@ class ApiService {
 
   // Confusion
   async submitConfusion(confusionData) {
+    console.log('📊 Submitting confusion:', confusionData);
     const response = await this.client.post('/confusion', confusionData);
     return response.data;
   }

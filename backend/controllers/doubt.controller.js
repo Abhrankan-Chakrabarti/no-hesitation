@@ -1,6 +1,7 @@
 const Doubt = require('../models/Doubt.model');
 const Session = require('../models/Session.model');
 const { findSimilarDoubts, extractTopic } = require('../utils/nlp.utils');
+const mongoose = require('mongoose');
 
 class DoubtController {
   // Submit a new doubt
@@ -8,8 +9,23 @@ class DoubtController {
     try {
       const { sessionId, question, studentId, studentName, isAnonymous, confusionLevel } = req.body;
 
+      console.log('📝 Submitting doubt:', { sessionId, question, studentName });
+
+      // Convert sessionId to ObjectId if it's a 6-character code
+      let actualSessionId = sessionId;
+      if (sessionId.length === 6) {
+        const allSessions = await Session.find({ isActive: true });
+        const session = allSessions.find(s => 
+          s._id.toString().slice(-6).toUpperCase() === sessionId.toUpperCase()
+        );
+        if (!session) {
+          return res.status(400).json({ error: 'Session not found' });
+        }
+        actualSessionId = session._id;
+      }
+
       // Validate session
-      const session = await Session.findById(sessionId);
+      const session = await Session.findById(actualSessionId);
       if (!session || !session.isActive) {
         return res.status(400).json({ error: 'Invalid or inactive session' });
       }
@@ -19,7 +35,7 @@ class DoubtController {
 
       // Create new doubt
       const doubt = new Doubt({
-        sessionId,
+        sessionId: actualSessionId,
         question,
         studentId,
         studentName: isAnonymous ? 'Anonymous' : studentName,
@@ -35,7 +51,7 @@ class DoubtController {
 
       // Auto-merge if enabled
       if (session.settings.autoMergeDoubts) {
-        const similarDoubts = await findSimilarDoubts(sessionId, question);
+        const similarDoubts = await findSimilarDoubts(actualSessionId, question);
         
         if (similarDoubts.length > 0) {
           const mainDoubt = similarDoubts[0];
@@ -51,8 +67,8 @@ class DoubtController {
           await doubt.save();
 
           // Emit real-time update
-          const io = req.app.get('io');
-          io.to(sessionId).emit('doubt-merged', {
+          console.log('🔥 Emitting doubt-merged to session:', actualSessionId.toString());
+          req.io.to(actualSessionId.toString()).emit('doubt-merged', {
             doubt: mainDoubt,
             mergedCount: mainDoubt.mergedCount
           });
@@ -72,8 +88,8 @@ class DoubtController {
       await session.save();
 
       // Emit real-time update
-      const io = req.app.get('io');
-      io.to(sessionId).emit('new-doubt', doubt);
+      console.log('📤 Emitting new-doubt to session:', actualSessionId.toString());
+      req.io.to(actualSessionId.toString()).emit('new-doubt', doubt);
 
       res.status(201).json({
         success: true,
@@ -81,7 +97,7 @@ class DoubtController {
         merged: false
       });
     } catch (error) {
-      console.error('Error submitting doubt:', error);
+      console.error('❌ Error submitting doubt:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -89,8 +105,20 @@ class DoubtController {
   // Get all doubts for a session
   async getDoubts(req, res) {
     try {
-      const { sessionId } = req.params;
+      let { sessionId } = req.params;
       const { answered, topic } = req.query;
+
+      // Convert 6-character code to ObjectId
+      if (sessionId.length === 6) {
+        const allSessions = await Session.find({ isActive: true });
+        const session = allSessions.find(s => 
+          s._id.toString().slice(-6).toUpperCase() === sessionId.toUpperCase()
+        );
+        if (!session) {
+          return res.status(404).json({ error: 'Session not found' });
+        }
+        sessionId = session._id;
+      }
 
       const query = { sessionId, mergedWith: null };
       
@@ -111,7 +139,7 @@ class DoubtController {
         count: doubts.length
       });
     } catch (error) {
-      console.error('Error fetching doubts:', error);
+      console.error('❌ Error fetching doubts:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -140,15 +168,15 @@ class DoubtController {
       });
 
       // Emit real-time update
-      const io = req.app.get('io');
-      io.to(doubt.sessionId.toString()).emit('doubt-answered', doubt);
+      console.log('✅ Emitting doubt-answered to session:', doubt.sessionId.toString());
+      req.io.to(doubt.sessionId.toString()).emit('doubt-answered', doubt);
 
       res.json({
         success: true,
         doubt
       });
     } catch (error) {
-      console.error('Error marking doubt as answered:', error);
+      console.error('❌ Error marking doubt as answered:', error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -177,15 +205,14 @@ class DoubtController {
       await doubt.save();
 
       // Emit real-time update
-      const io = req.app.get('io');
-      io.to(doubt.sessionId.toString()).emit('doubt-upvoted', doubt);
+      req.io.to(doubt.sessionId.toString()).emit('doubt-upvoted', doubt);
 
       res.json({
         success: true,
         doubt
       });
     } catch (error) {
-      console.error('Error upvoting doubt:', error);
+      console.error('❌ Error upvoting doubt:', error);
       res.status(500).json({ error: error.message });
     }
   }

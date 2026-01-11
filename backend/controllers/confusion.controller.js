@@ -6,7 +6,19 @@ class ConfusionController {
   // Submit confusion level
   async submitConfusion(req, res) {
     try {
-      const { sessionId, studentId, studentName, level } = req.body;
+      let { sessionId, studentId, studentName, level } = req.body;
+
+      // Convert 6-character code to ObjectId
+      if (sessionId.length === 6) {
+        const allSessions = await Session.find({ isActive: true });
+        const session = allSessions.find(s => 
+          s._id.toString().slice(-6).toUpperCase() === sessionId.toUpperCase()
+        );
+        if (!session) {
+          return res.status(400).json({ error: 'Session not found' });
+        }
+        sessionId = session._id;
+      }
 
       const confusion = new Confusion({
         sessionId,
@@ -21,8 +33,8 @@ class ConfusionController {
       const stats = await this.getConfusionStats(sessionId);
 
       // Emit real-time update
-      const io = req.app.get('io');
-      io.to(sessionId).emit('confusion-updated', stats);
+      console.log('📊 Emitting confusion-updated to session:', sessionId.toString());
+      req.io.to(sessionId.toString()).emit('confusion-updated', stats);
 
       res.status(201).json({
         success: true,
@@ -30,12 +42,12 @@ class ConfusionController {
         stats
       });
     } catch (error) {
-      console.error('Error submitting confusion:', error);
+      console.error('❌ Error submitting confusion:', error);
       res.status(500).json({ error: error.message });
     }
   }
 
-  // Get confusion statistics (FIXED)
+  // Get confusion statistics
   async getConfusionStats(sessionId) {
     try {
       const fiveMinutesAgo = new Date(Date.now() - 5 * 60 * 1000);
@@ -88,7 +100,7 @@ class ConfusionController {
 
       return stats;
     } catch (error) {
-      console.error('Error getting confusion stats:', error);
+      console.error('❌ Error getting confusion stats:', error);
       // Return default stats on error
       return {
         clear: 0,
@@ -100,10 +112,23 @@ class ConfusionController {
     }
   }
 
-  // Get confusion stats endpoint (FIXED)
+  // Get confusion stats endpoint
   async getStats(req, res) {
     try {
-      const { sessionId } = req.params;
+      let { sessionId } = req.params;
+
+      // Convert 6-character code to ObjectId
+      if (sessionId.length === 6) {
+        const allSessions = await Session.find({ isActive: true });
+        const session = allSessions.find(s => 
+          s._id.toString().slice(-6).toUpperCase() === sessionId.toUpperCase()
+        );
+        if (!session) {
+          return res.status(404).json({ error: 'Session not found' });
+        }
+        sessionId = session._id;
+      }
+
       const stats = await this.getConfusionStats(sessionId);
 
       res.json({
@@ -111,7 +136,7 @@ class ConfusionController {
         stats
       });
     } catch (error) {
-      console.error('Error fetching confusion stats:', error);
+      console.error('❌ Error fetching confusion stats:', error);
       res.status(500).json({ 
         error: error.message,
         stats: {

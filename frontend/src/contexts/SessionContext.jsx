@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import apiService from '../services/api.service';
 import socketService from '../services/socket.service';
 
@@ -25,14 +25,50 @@ export const SessionProvider = ({ children, sessionId }) => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Real-time event handlers
+  const handleNewDoubt = useCallback((doubt) => {
+    console.log('📨 Received new-doubt:', doubt);
+    setDoubts(prev => {
+      // Check if doubt already exists
+      const exists = prev.some(d => d._id === doubt._id);
+      if (exists) return prev;
+      return [doubt, ...prev];
+    });
+  }, []);
+
+  const handleDoubtMerged = useCallback(({ doubt }) => {
+    console.log('🔥 Received doubt-merged:', doubt);
+    setDoubts(prev => prev.map(d => 
+      d._id === doubt._id ? doubt : d
+    ));
+  }, []);
+
+  const handleDoubtAnswered = useCallback((doubt) => {
+    console.log('✅ Received doubt-answered:', doubt);
+    setDoubts(prev => prev.map(d => 
+      d._id === doubt._id ? doubt : d
+    ));
+  }, []);
+
+  const handleDoubtUpvoted = useCallback((doubt) => {
+    console.log('👍 Received doubt-upvoted:', doubt);
+    setDoubts(prev => prev.map(d => 
+      d._id === doubt._id ? doubt : d
+    ));
+  }, []);
+
+  const handleConfusionUpdated = useCallback((stats) => {
+    console.log('📊 Received confusion-updated:', stats);
+    setConfusionStats(stats);
+  }, []);
+
   useEffect(() => {
     if (sessionId) {
       initializeSession();
-      setupRealtimeListeners();
     }
 
     return () => {
-      socketService.disconnect();
+      cleanup();
     };
   }, [sessionId]);
 
@@ -41,9 +77,14 @@ export const SessionProvider = ({ children, sessionId }) => {
       setLoading(true);
       setError(null);
 
+      console.log('🔄 Initializing session:', sessionId);
+
       // Load session data
       const sessionData = await apiService.getSession(sessionId);
       setSession(sessionData.session);
+      
+      // Use the actual ObjectId for real-time
+      const actualSessionId = sessionData.session._id;
 
       // Load doubts
       try {
@@ -76,8 +117,7 @@ export const SessionProvider = ({ children, sessionId }) => {
       }
       
       // Setup real-time connection
-      socketService.connect();
-      socketService.joinSession(sessionId);
+      setupRealtimeListeners(actualSessionId);
 
     } catch (err) {
       console.error('Session initialization error:', err);
@@ -87,27 +127,45 @@ export const SessionProvider = ({ children, sessionId }) => {
     }
   };
 
-  const setupRealtimeListeners = () => {
-    socketService.on('new-doubt', (doubt) => {
-      setDoubts(prev => [doubt, ...prev]);
-    });
-
-    socketService.on('doubt-merged', ({ doubt }) => {
-      setDoubts(prev => prev.map(d => 
-        d._id === doubt._id ? doubt : d
-      ));
-    });
-
-    socketService.on('doubt-answered', (doubt) => {
-      setDoubts(prev => prev.map(d => 
-        d._id === doubt._id ? doubt : d
-      ));
-    });
-
-    socketService.on('confusion-updated', (stats) => {
-      setConfusionStats(stats);
-    });
+  const setupRealtimeListeners = (actualSessionId) => {
+    console.log('🎧 Setting up real-time listeners for session:', actualSessionId);
+    
+    // Connect socket
+    socketService.connect();
+    
+    // Join session room
+    socketService.joinSession(actualSessionId);
+    
+    // Register event listeners
+    socketService.on('new-doubt', handleNewDoubt);
+    socketService.on('doubt-merged', handleDoubtMerged);
+    socketService.on('doubt-answered', handleDoubtAnswered);
+    socketService.on('doubt-upvoted', handleDoubtUpvoted);
+    socketService.on('confusion-updated', handleConfusionUpdated);
   };
+
+  const cleanup = () => {
+    console.log('🧹 Cleaning up session context');
+    
+    // Remove event listeners
+    socketService.off('new-doubt', handleNewDoubt);
+    socketService.off('doubt-merged', handleDoubtMerged);
+    socketService.off('doubt-answered', handleDoubtAnswered);
+    socketService.off('doubt-upvoted', handleDoubtUpvoted);
+    socketService.off('confusion-updated', handleConfusionUpdated);
+    
+    // Disconnect socket
+    socketService.disconnect();
+  };
+
+  const refreshDoubts = useCallback(async () => {
+    try {
+      const doubtsData = await apiService.getDoubts(sessionId);
+      setDoubts(doubtsData.doubts || []);
+    } catch (err) {
+      console.error('Error refreshing doubts:', err);
+    }
+  }, [sessionId]);
 
   const value = {
     session,
@@ -115,7 +173,7 @@ export const SessionProvider = ({ children, sessionId }) => {
     confusionStats,
     loading,
     error,
-    refreshDoubts: () => initializeSession()
+    refreshDoubts
   };
 
   return (
@@ -126,4 +184,3 @@ export const SessionProvider = ({ children, sessionId }) => {
 };
 
 export default SessionContext;
-

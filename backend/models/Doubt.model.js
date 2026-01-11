@@ -62,11 +62,7 @@ const doubtSchema = new mongoose.Schema({
   },
   upvotedBy: [{
     type: String
-  }],
-  embeddings: {
-    type: [Number],
-    default: []
-  }
+  }]
 }, {
   timestamps: true
 });
