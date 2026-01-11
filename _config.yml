@@ -1,0 +1,36 @@
+# _config.yml
+# Jekyll configuration for GitHub Pages
+
+# Site settings
+title: "No Hesitation"
+description: "A real-time, distraction-free question submission platform that enables students to ask doubts without hesitation and helps instructors understand classroom comprehension instantly."
+baseurl: "" # leave empty unless your site is in a subpath
+url: "https://abhrankan-chakrabarti.github.io/no-hesitation"
+
+# Build settings
+markdown: kramdown
+theme: jekyll-theme-primer
+
+# Plugins supported by GitHub Pages
+plugins:
+  - jekyll-seo-tag
+  - jekyll-gist
+  - jekyll-relative-links
+  - jekyll-optional-front-matter
+  - jekyll-readme-index
+  - jekyll-default-layout
+  - jekyll-titles-from-headings
+
+# Exclude directories/files from build
+exclude:
+  - node_modules
+  - backend/node_modules
+  - vendor
+  - Gemfile
+  - Gemfile.lock
+  - package.json
+  - package-lock.json
+
+# GitHub metadata (auto-populated on Pages)
+github:
+  is_project_page: true
